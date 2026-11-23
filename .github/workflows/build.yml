@@ -1,18 +1,27 @@
-name: Build Andarium IPA (内置镜像)
+name: Build Andarium IPA (from source)
 
-# 打包（侧载用）流水线 —— 「内置镜像、即开即用」
-# Andarium 把 LineageOS 系统镜像 + 内核 bundle 直接打包进 App（所以 App 约 1.2GB），
-# 用户装上即可用，无需首次下载。本工作流复刻这一过程：
-#   1) 下载预编译镜像资产（内核 bundle + 系统镜像）
-#   2) stage-system-image.py 把它们嵌入 App
-#   3) xcodebuild 编译并打包成未签名 .ipa
-#   4) 未签名 IPA 交给 AltStore / SideStore 用你自己的 Apple ID 签名侧载
+# =============================================================================
+# Andarium 从源码构建（真实、完整、权威）流水线
+# -----------------------------------------------------------------------------
+# 依据上游 AGENTS.md / Andarium/README.md#build / docs/testing.md 的真实构建序列：
 #
-# 注意（诚实声明）：
-# 1. Andarium 使用 Xcode 27 的 JSON 工程格式（project.xcproj），需要较新的
-#    macOS runner（或自建 runner）。若 runner 的 Xcode 版本不够，请换带 Xcode 27 的镜像。
-# 2. 上游 release 的资产名若变化，请同步修改下方 IMAGE_ASSET / KERNEL_ASSET / TAG。
-# 3. 签名/公证需要开发者证书，本工作流刻意不做签名，产出未签名 IPA。
+#   1) cmake --preset kernarium-ios-device-android
+#   2) cmake --build   --preset kernarium-ios-device-android
+#   3) Kernarium/scripts/package-ios-frameworks.sh --runtimes android
+#   4) Andarium/scripts/stage-system-image.py
+#   5) xcodebuild -project Andarium/Andarium.xcodeproj -scheme Andarium \
+#          -destination 'generic/platform=iOS' build
+#
+# ⚠️ 硬前提（诚实声明，不可绕过）：
+#   - Andarium 使用 Xcode 27 的 JSON 工程格式（project.xcproj），只有 Xcode 27 能读。
+#   - GitHub 托管的 macOS runner（macos-13/14/15）只带 Xcode 16.x，跑不了第 5 步。
+#   - 因此本工作流默认跑在【自建 runner】上，标签：self-hosted, macOS, ARM64。
+#     在 Mac 上执行一次即可：
+#       https://github.com/goodcode1024/Kernarium/settings/actions/runners/new
+#     标签填：self-hosted,macOS,ARM64
+#   - 运行需要：CMake ≥ 3.27 + Ninja + Xcode 27 + 约 15GB 磁盘（含 1GB 系统镜像）。
+#   - 本仓库不签名：产出未签名 IPA，交给 AltStore / SideStore 用你的 Apple ID 签名侧载。
+# =============================================================================
 
 on:
   push:
@@ -22,40 +31,61 @@ on:
 env:
   UPSTREAM: imxieyi/Kernarium
   TAG: andarium-1.1
+  # 内核 bundle（11MB）与系统镜像（1.09GB）——目录名与 accepted-*.env 严格一致
   KERNEL_ASSET: android-6.18-arm64-4k-20261119-6.18.60-ca1.tar.gz
+  KERNEL_DIR: android-6.18-arm64-4k-20261119-6.18.60-ca1
   IMAGE_ASSET: lineage24-mainline6.18-4k-20261121-los24-r29.tar.gz
+  IMAGE_DIR: lineage24-mainline6.18-4k-20261121-los24-r29
 
 jobs:
   build-ipa:
-    runs-on: macos-15
+    runs-on: [self-hosted, macOS, ARM64]
     steps:
-      - name: Checkout
+      - name: Checkout (submodules)
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Select latest Xcode
+      - name: Toolchain (CMake + Ninja)
         run: |
-          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          cmake --version
+          ninja --version || brew install ninja
           xcodebuild -version
 
-      - name: Download prebuilt kernel + system image (内置镜像)
+      - name: Fetch pinned dependencies
+        run: |
+          # 仓库唯一允许联网的依赖入口；预编译静态前缀（大，首次较慢）
+          ./dependencies/prepare.sh
+
+      - name: Configure Android runtime (CMake)
+        run: cmake --preset kernarium-ios-device-android
+
+      - name: Build Android runtime
+        run: cmake --build --preset kernarium-ios-device-android
+
+      - name: Download accepted kernel bundle + system image
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p .downloads
+          mkdir -p .build/kernel/artifacts .build/android/releases
           gh release download "$TAG" --repo "$UPSTREAM" \
-            --pattern "$KERNEL_ASSET" \
-            --pattern "$IMAGE_ASSET" \
-            --dir .downloads
-          ls -lh .downloads
+            --pattern "$KERNEL_ASSET" --pattern "$IMAGE_ASSET" --dir .downloads
+          # 内核 bundle → .build/kernel/artifacts/<KERNEL_DIR>
+          tar -xzf ".downloads/$KERNEL_ASSET" -C .build/kernel/artifacts
+          # 系统镜像 → .build/android/releases/<IMAGE_DIR>
+          tar -xzf ".downloads/$IMAGE_ASSET" -C .build/android/releases
+          # 若 tar 顶层多包了一层同名目录，去掉注释并按需 strip-components：
+          # find .build/android/releases -mindepth 2 -maxdepth 2 -name release-manifest.json \
+          #   -exec sh -c 'mv "$(dirname "$1")"/* .build/android/releases/"$IMAGE_DIR"/' _ {} \;
+          ls -lh .build/kernel/artifacts .build/android/releases
 
-      - name: Stage system image into app
-        run: |
-          # 把下载的镜像/内核嵌入 App bundle，实现「即开即用」
-          python3 Andarium/scripts/stage-system-image.py
+      - name: Package runtime frameworks
+        run: Kernarium/scripts/package-ios-frameworks.sh --runtimes android
 
-      - name: Build (unsigned, device)
+      - name: Stage system image (内置镜像，即开即用)
+        run: Andarium/scripts/stage-system-image.py
+
+      - name: Build app (unsigned, device)
         run: |
           xcodebuild \
             -project Andarium/Andarium.xcodeproj \
@@ -63,6 +93,7 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
+            EXCLUDED_ARCHS=x86_64 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
