@@ -1,0 +1,79 @@
+name: Build Andarium IPA
+
+# 打包（侧载用）流水线：
+# - 在 macOS runner 上编译 Andarium App
+# - 使用 CODE_SIGNING_ALLOWED=NO 产出未签名 .app，再打包成 .ipa
+# - 未签名 IPA 交给 AltStore / SideStore 用你自己的 Apple ID 签名侧载
+#
+# 注意（诚实声明）：
+# 1. Andarium 使用 Xcode 27 的 JSON 工程格式（project.xcproj），
+#    需要较新的 macOS runner（或自建 runner）。如 runner 上的 Xcode 版本
+#    不够，请把 runs-on 换成带 Xcode 27 的镜像。
+# 2. 完整构建需要「预编译 Android 系统镜像 + 预编译内核 bundle」，
+#    它们来自上游 release（"Andarium 1.1 IPA + Prebuilts"）。本工作流
+#    会尝试从 release 拉取并 stage；若资产名有变，请同步修改 STAGE 步骤。
+# 3. 签名/公证需要开发者证书，本工作流刻意不做签名，产出未签名 IPA。
+
+on:
+  push:
+    tags: ["*"]
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select latest Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Download prebuilt Android image (best effort)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 从上游 release 拿预编译镜像（避免自建 Android 镜像：需数百 GB 磁盘/数小时）
+          gh release download --repo imxieyi/Kernarium \
+            --pattern '*image*' --pattern '*prebuilt*' --dir .downloads || \
+            echo "::warning::未下载到预编译镜像，需本地手动 stage"
+
+      - name: Stage system image
+        run: |
+          if [ -f Andarium/scripts/stage-system-image.py ]; then
+            python3 Andarium/scripts/stage-system-image.py || \
+              echo "::warning::stage 失败，检查镜像路径"
+          fi
+
+      - name: Build (unsigned, device)
+        run: |
+          xcodebuild \
+            -project Andarium/Andarium.xcodeproj \
+            -scheme Andarium \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="$(find build/Build/Products -name '*.app' -maxdepth 3 | head -1)"
+          echo "APP_PATH=$APP_PATH"
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qry Andarium-unsigned.ipa Payload
+          rm -rf Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Andarium-unsigned-ipa
+          path: Andarium-unsigned.ipa
+          retention-days: 7
