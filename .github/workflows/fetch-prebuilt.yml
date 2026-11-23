@@ -1,0 +1,37 @@
+name: Fetch prebuilt Andarium IPA
+
+# =============================================================================
+# 最快拿到「能完整运行 APK」的成品：直接抓取上游已签好的预编译 IPA 并重托管。
+# -----------------------------------------------------------------------------
+# 上游 release 已发布成品 Andarium-1.1-16.ipa（约 1.16GB，iOS 26+）。
+# 本工作流在 GitHub 托管 runner（ubuntu-latest）上即可运行，无需 Mac/Xcode，
+# 把它下载并作为本 fork 的 artifact 重新托管，给你一个稳定下载入口。
+#
+# 注：IPA 未在本仓库重新签名，侧载时 AltStore / SideStore 会用你的 Apple ID 签名。
+# =============================================================================
+
+on:
+  workflow_dispatch:
+
+env:
+  UPSTREAM: imxieyi/Kernarium
+  TAG: andarium-1.1
+  IPA: Andarium-1.1-16.ipa
+
+jobs:
+  fetch-ipa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download prebuilt IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$TAG" --repo "$UPSTREAM" --pattern "$IPA" --dir .
+          ls -lh "$IPA"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Andarium-1.1-16-prebuilt-ipa
+          path: ${{ env.IPA }}
+          retention-days: 7
