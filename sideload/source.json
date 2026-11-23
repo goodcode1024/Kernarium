@@ -1,16 +1,16 @@
 {
-  "name": "Kernarium",
-  "identifier": "com.imxieyi.kernarium.source",
-  "sourceURL": "https://raw.githubusercontent.com/imxieyi/Kernarium/main/sideload/source.json",
-  "subtitle": "Apps built on the Kernarium runtime",
-  "description": "Apps built on the Kernarium runtime, which runs a real Linux kernel natively on iPhone and iPad.",
+  "name": "Andarium (goodcode1024 fork)",
+  "identifier": "com.goodcode1024.andarium.source",
+  "sourceURL": "https://raw.githubusercontent.com/goodcode1024/Kernarium/main/sideload/source.json",
+  "subtitle": "Android on iPhone and iPad (Kernarium runtime)",
+  "description": "Andarium runs the Android system on iPhone and iPad, built on the Kernarium runtime which runs a real Linux kernel natively and emulates only app code. Forked from imxieyi/Kernarium.",
   "iconURL": "https://raw.githubusercontent.com/imxieyi/Kernarium/main/sideload/andarium.png",
-  "website": "https://github.com/imxieyi/Kernarium",
+  "website": "https://github.com/goodcode1024/Kernarium",
   "apps": [
     {
       "name": "Andarium",
       "bundleIdentifier": "com.imxieyi.andarium",
-      "developerName": "imxieyi",
+      "developerName": "imxieyi (fork: goodcode1024)",
       "subtitle": "Android on iPhone and iPad",
       "localizedDescription": "Andarium runs the Android system on iPhone and iPad. It is built on the Kernarium runtime, which runs a real Linux kernel natively and emulates only the code of the apps, with graphics drawn through Metal.\n\nIt needs iOS 26 or later. With a free Apple ID, Android gets less memory. JIT is optional and experimental.",
       "iconURL": "https://raw.githubusercontent.com/imxieyi/Kernarium/main/sideload/andarium.png",
@@ -19,7 +19,7 @@
           "version": "1.1",
           "buildVersion": "16",
           "date": "2026-11-23",
-          "localizedDescription": "New: root access with Magisk, Android's system libraries translated ahead of time, 120 Hz on ProMotion devices, Add to Home Screen, VoiceOver support, a frame rate that drops only when the device is very hot, text messages you write, and a notice when a newer version is out.\n\nFixed: Wi-Fi dropping when you return to Andarium, face scans in some apps that use the front camera, connections hanging after a move from Wi-Fi to cellular data, apps failing to reach servers after the network returns. VP9 videos now play with the hardware decoder.",
+          "localizedDescription": "Root access with Magisk, Android's system libraries translated ahead of time, 120 Hz on ProMotion devices, Add to Home Screen, VoiceOver support, and more.",
           "downloadURL": "https://github.com/imxieyi/Kernarium/releases/download/andarium-1.1/Andarium-1.1-16.ipa",
           "size": 1248669708,
           "minOSVersion": "26.0"
@@ -27,17 +27,5 @@
       ]
     }
   ],
-  "news": [],
-  "kernariumUpdates": {
-    "format": 1,
-    "apps": {
-      "com.imxieyi.andarium": {
-        "versions": {
-          "16": {
-            "notesURL": "https://github.com/imxieyi/Kernarium/releases/tag/andarium-1.1"
-          }
-        }
-      }
-    }
-  }
+  "news": []
 }
